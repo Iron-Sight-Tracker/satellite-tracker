@@ -1,0 +1,62 @@
+name: Update BlueBird TLEs
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # runs daily at 06:00 UTC
+  workflow_dispatch:        # allows manual trigger from GitHub UI
+
+permissions:
+  contents: write           # allow the action to commit the updated TLE file
+
+jobs:
+  fetch-tles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch SPACEMOBILE TLEs from CelesTrak
+        run: |
+          python - <<'EOF'
+          import requests, sys, pathlib
+
+          # CelesTrak General Perturbations (GP) API — partial name match,
+          # returned as 3-line TLE text. This is the correct endpoint for
+          # pulling the whole SPACEMOBILE (BlueBird) constellation by name.
+          resp = requests.get(
+              "https://celestrak.org/NORAD/elements/gp.php",
+              params={"NAME": "SPACEMOBILE", "FORMAT": "TLE"},
+              timeout=30,
+          )
+          resp.raise_for_status()
+
+          text = resp.text.strip()
+          if not text or "No GP data found" in text:
+              print("ERROR: No SPACEMOBILE satellites returned by CelesTrak")
+              sys.exit(1)
+
+          pathlib.Path("tles").mkdir(exist_ok=True)
+          pathlib.Path("tles/spacemobile.txt").write_text(text + "\n")
+
+          sat_count = len([l for l in text.splitlines() if l.strip()]) // 3
+          print(f"Fetched {sat_count} satellites")
+          if sat_count == 0:
+              print("ERROR: No satellites fetched")
+              sys.exit(1)
+          EOF
+
+      - name: Commit updated TLEs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tles/spacemobile.txt
+          git diff --staged --quiet || git commit -m "Update BlueBird TLEs $(date -u +%Y-%m-%d)"
+          git push
