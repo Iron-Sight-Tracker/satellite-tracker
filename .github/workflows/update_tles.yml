@@ -2,11 +2,11 @@ name: Update BlueBird TLEs
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  #runs every 2 hours (matches CelesTrak's update cadence)
-  workflow_dispatch:        # allows manual trigger from GitHub UI
+    - cron: '*/30 * * * *'   # checks every 30 min; only downloads when CelesTrak has new data
+  workflow_dispatch:          # allows manual trigger from GitHub UI
 
 permissions:
-  contents: write           # allow the action to commit the updated TLE file
+  contents: write             # allow the action to commit the updated TLE file
 
 jobs:
   fetch-tles:
@@ -23,40 +23,59 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Fetch SPACEMOBILE TLEs from CelesTrak
+      - name: Conditionally fetch SPACEMOBILE TLEs from CelesTrak
         run: |
           python - <<'EOF'
           import requests, sys, pathlib
 
-          # CelesTrak General Perturbations (GP) API — partial name match,
-          # returned as 3-line TLE text. This is the correct endpoint for
-          # pulling the whole SPACEMOBILE (BlueBird) constellation by name.
+          DATA_FILE = pathlib.Path("tles/spacemobile.txt")
+          STATE_FILE = pathlib.Path("tles/.last_modified")  # remembers CelesTrak's Last-Modified
+
+          # Send If-Modified-Since so CelesTrak returns 304 (no body) when nothing changed.
+          headers = {}
+          if STATE_FILE.exists() and DATA_FILE.exists():
+              prev = STATE_FILE.read_text().strip()
+              if prev:
+                  headers["If-Modified-Since"] = prev
+
           resp = requests.get(
               "https://celestrak.org/NORAD/elements/gp.php",
               params={"NAME": "SPACEMOBILE", "FORMAT": "TLE"},
+              headers=headers,
               timeout=30,
           )
-          resp.raise_for_status()
+
+          # 304 = our cache is still current. Nothing to download or commit.
+          if resp.status_code == 304:
+              print("304 Not Modified — CelesTrak has no new data. Skipping.")
+              sys.exit(0)
+
+          resp.raise_for_status()  # any other non-200 is a real error
 
           text = resp.text.strip()
           if not text or "No GP data found" in text:
               print("ERROR: No SPACEMOBILE satellites returned by CelesTrak")
               sys.exit(1)
 
-          pathlib.Path("tles").mkdir(exist_ok=True)
-          pathlib.Path("tles/spacemobile.txt").write_text(text + "\n")
-
           sat_count = len([l for l in text.splitlines() if l.strip()]) // 3
-          print(f"Fetched {sat_count} satellites")
           if sat_count == 0:
-              print("ERROR: No satellites fetched")
+              print("ERROR: No satellites parsed")
               sys.exit(1)
+
+          pathlib.Path("tles").mkdir(exist_ok=True)
+          DATA_FILE.write_text(text + "\n")
+
+          # Save CelesTrak's Last-Modified so the next run can ask "anything newer?"
+          last_mod = resp.headers.get("Last-Modified", "")
+          STATE_FILE.write_text(last_mod + "\n")
+
+          print(f"Updated: {sat_count} satellites. CelesTrak Last-Modified: {last_mod or 'n/a'}")
           EOF
 
       - name: Commit updated TLEs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tles/spacemobile.txt
-          git diff --staged --quiet || git commit -m "Update BlueBird TLEs $(date -u +%Y-%m-%d)"
+          git add tles/spacemobile.txt tles/.last_modified
+          git diff --staged --quiet || git commit -m "Update BlueBird TLEs $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
