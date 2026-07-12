@@ -1,0 +1,19 @@
+# BlueBird / SpaceMobile satellite name + size overrides
+# Format:  NORAD_ID | Friendly Name | Size
+#   - NORAD_ID    : catalog number (integer). Required.
+#   - Friendly Name: any text. Leave blank to keep the NORAD name.
+#   - Size        : free text (e.g. "BB1", "BB2", "693 sq ft"). Leave blank if unknown.
+# Blank lines and lines starting with # are ignored.
+# Whitespace around fields is trimmed.
+
+
+53807 | BLUEWALKER 3 |
+61047 | BLUEBIRD 1 |
+61048 | BLUEBIRD 2 |
+61045 | BLUEBIRD 3 |
+61049 | BLUEBIRD 4 |
+61046 | BLUEBIRD 5 |
+67232 | BLUEBIRD 6 |
+69589 | BLUEBIRD 8 |
+69590 | BLUEBIRD 9 |
+69591 | BLUEBIRD 10 |
