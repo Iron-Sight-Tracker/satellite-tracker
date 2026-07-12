@@ -1,0 +1,8 @@
+# BlueBird block class → deployed antenna area (square feet).
+# Format:  Block Name | Square Feet
+# Edit these values to change the size the app uses for every satellite
+# in a block. Add new rows here (e.g. "Block 3 | 5000") as new hardware ships.
+
+Block 0 | 693
+Block 1 | 693
+Block 2 | 2400
