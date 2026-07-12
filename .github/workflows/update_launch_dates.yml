@@ -1,0 +1,36 @@
+name: Update launch dates
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # daily, 06:17 UTC (odd minute to dodge peak)
+  workflow_dispatch:        # allow manual runs
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch SATCAT for SpaceMobile group
+        run: |
+          mkdir -p launch
+          curl -fsSL \
+            "https://celestrak.org/satcat/records.php?GROUP=spacemobile&FORMAT=CSV" \
+            -o /tmp/satcat.csv
+          python3 .github/scripts/build_launch_dates.py \
+            /tmp/satcat.csv launch/launch_dates.txt
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet launch/launch_dates.txt; then
+            echo "No changes."
+          else
+            git add launch/launch_dates.txt
+            git commit -m "Update launch dates from SATCAT"
+            git push
+          fi
