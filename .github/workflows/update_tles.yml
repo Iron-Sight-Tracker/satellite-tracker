@@ -1,4 +1,4 @@
-name: Update BlueBird TLEs
+name: Update BlueBird orbit data
 
 on:
   schedule:
@@ -6,10 +6,10 @@ on:
   workflow_dispatch:          # allows manual trigger from GitHub UI
 
 permissions:
-  contents: write             # allow the action to commit the updated TLE file
+  contents: write             # allow the action to commit the updated data file
 
 jobs:
-  fetch-tles:
+  fetch-orbits:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -23,11 +23,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Conditionally fetch SPACEMOBILE TLEs from CelesTrak
+      - name: Conditionally fetch SPACEMOBILE orbit data from CelesTrak
         run: |
           python - <<'EOF'
           import requests, sys, pathlib
 
+          # OMM CSV — CCSDS-standard GP element format. Unlike the legacy TLE
+          # 3-line format, its NORAD_CAT_ID is a plain integer field, so it
+          # carries 6+ digit catalog numbers natively (no Alpha-5 kludge).
           DATA_FILE = pathlib.Path("tles/spacemobile.txt")
           STATE_FILE = pathlib.Path("tles/.last_modified")  # remembers CelesTrak's Last-Modified
 
@@ -40,7 +43,7 @@ jobs:
 
           resp = requests.get(
               "https://celestrak.org/NORAD/elements/gp.php",
-              params={"NAME": "SPACEMOBILE", "FORMAT": "TLE"},
+              params={"NAME": "SPACEMOBILE", "FORMAT": "CSV"},
               headers=headers,
               timeout=30,
           )
@@ -57,7 +60,9 @@ jobs:
               print("ERROR: No SPACEMOBILE satellites returned by CelesTrak")
               sys.exit(1)
 
-          sat_count = len([l for l in text.splitlines() if l.strip()]) // 3
+          # CSV = one header row + one row per satellite.
+          rows = [l for l in text.splitlines() if l.strip()]
+          sat_count = max(0, len(rows) - 1)
           if sat_count == 0:
               print("ERROR: No satellites parsed")
               sys.exit(1)
@@ -72,10 +77,10 @@ jobs:
           print(f"Updated: {sat_count} satellites. CelesTrak Last-Modified: {last_mod or 'n/a'}")
           EOF
 
-      - name: Commit updated TLEs
+      - name: Commit updated orbit data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add tles/spacemobile.txt tles/.last_modified
-          git diff --staged --quiet || git commit -m "Update BlueBird TLEs $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git diff --staged --quiet || git commit -m "Update BlueBird orbit data $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
