@@ -17,9 +17,17 @@ jobs:
       - name: Fetch SATCAT for SpaceMobile satellites
         run: |
           mkdir -p launch
+          # SATCAT NAME= is a single substring match, so BLUEWALKER-3 needs
+          # its own request; merge both result sets under one header row.
           curl -fsSL \
             "https://celestrak.org/satcat/records.php?NAME=SPACEMOBILE&FORMAT=CSV" \
-            -o /tmp/satcat.csv
+            -o /tmp/satcat_sm.csv
+          curl -fsSL \
+            "https://celestrak.org/satcat/records.php?NAME=BLUEWALKER&FORMAT=CSV" \
+            -o /tmp/satcat_bw.csv
+          head -1 /tmp/satcat_sm.csv > /tmp/satcat.csv
+          tail -n +2 /tmp/satcat_sm.csv >> /tmp/satcat.csv
+          tail -n +2 /tmp/satcat_bw.csv >> /tmp/satcat.csv
           python3 .github/scripts/build_launch_dates.py \
             /tmp/satcat.csv launch/launch_dates.txt
 
